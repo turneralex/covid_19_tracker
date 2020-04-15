@@ -210,7 +210,7 @@ shinyServer(function(input, output) {
             scale_x_date(date_breaks = "1 week") +
             scale_fill_brewer(palette = "Set1") +
             facet_grid(variable ~ ., scales = "free_y") +
-            labs(title = "Confirmed New Cases vs. Previous Day",
+            labs(title = "New Confirmed Cases vs. Previous Day",
                  subtitle = "First day is excluded due to extreme growth from a low base in some states",
                  x = "Date",
                  y = "Value") +
