@@ -1,2 +1,2 @@
 # covid_19_tracker
-covid-19 tracker for aus
+shiny app - covid-19 tracker for aus
