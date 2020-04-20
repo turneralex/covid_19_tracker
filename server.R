@@ -178,7 +178,7 @@ shinyServer(function(input, output) {
                  x = "Date",
                  y = "Cumulative Total Cases",
                  colour = "State",
-                 caption = "Data Source: https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json") +
+                 caption = "Data Source (via The Guardian): https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json") +
             theme(plot.caption = element_text(size = 10))
         
         p2 <- total_df() %>% 
@@ -207,6 +207,14 @@ shinyServer(function(input, output) {
         p3 <- change_df() %>% 
             ggplot(aes(date, value, fill = variable)) +
             geom_col() +
+            geom_label(data = change_df() %>% 
+                           group_by(variable) %>% 
+                           slice(n()),
+                       aes(date + 2,
+                           label = value,
+                           fill = variable),
+                       colour = "white",
+                       show.legend = F) +
             scale_x_date(date_breaks = "1 week") +
             scale_fill_brewer(palette = "Set1") +
             facet_grid(variable ~ ., scales = "free_y") +
