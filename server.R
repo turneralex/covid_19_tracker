@@ -66,6 +66,19 @@ covid_19_df <- covid_19_df %>%
             as.integer(0),
             cumulative_recoveries
         ),
+        # fix for erroneous SA data where on 17/04/2020 cumulative_recoveries == cumulative_cases
+        # despite cumulative_deaths being > 0
+        # needs to be done twice as the above fill() call duplicates the issue across 2 days
+        cumulative_recoveries = if_else(
+            (cumulative_deaths > 0) & (cumulative_recoveries >= cumulative_cases),
+            lag(cumulative_recoveries),
+            cumulative_recoveries
+        ),
+        cumulative_recoveries = if_else(
+            (cumulative_deaths > 0) & (cumulative_recoveries >= cumulative_cases),
+            lag(cumulative_recoveries),
+            cumulative_recoveries
+        ),
         cumulative_cases = if_else(
             lag(cumulative_cases, default = 0) > cumulative_cases,
             lag(cumulative_cases),
