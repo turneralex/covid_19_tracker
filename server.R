@@ -1,3 +1,5 @@
+source(here::here("covid_19_tracker_functions.R"))
+
 library(shiny)
 library(tidyverse)
 library(ggrepel)
@@ -66,23 +68,25 @@ covid_19_df <- covid_19_df %>%
             as.integer(0),
             cumulative_recoveries
         ),
-        # fix for erroneous SA data where on 17/04/2020 cumulative_recoveries == cumulative_cases
-        # despite cumulative_deaths being > 0
-        # needs to be done twice as the above fill() call duplicates the issue across 2 days
-        cumulative_recoveries = if_else(
-            (cumulative_deaths > 0) & (cumulative_recoveries >= cumulative_cases),
-            lag(cumulative_recoveries),
-            cumulative_recoveries
-        ),
-        cumulative_recoveries = if_else(
-            (cumulative_deaths > 0) & (cumulative_recoveries >= cumulative_cases),
-            lag(cumulative_recoveries),
-            cumulative_recoveries
-        ),
         cumulative_cases = if_else(
             lag(cumulative_cases, default = 0) > cumulative_cases,
             lag(cumulative_cases),
             cumulative_cases
+        )
+    ) %>% 
+    ungroup()
+
+covid_19_df <- covid_19_df %>% 
+    mutate(
+        cumulative_recoveries = replace(
+            cumulative_recoveries,
+            covid_19_df$state == "QLD",
+            covid_19_df %>% filter(state == "QLD") %>% pull(cumulative_recoveries) %>% fix_recoveries_low()
+        ),
+        cumulative_recoveries = replace(
+            cumulative_recoveries,
+            covid_19_df$state == "SA",
+            covid_19_df %>% filter(state == "SA") %>% pull(cumulative_recoveries) %>% fix_recoveries_high()
         ),
         cumulative_active_cases = cumulative_cases - cumulative_deaths - cumulative_recoveries,
         cases_change = cumulative_cases - lag(cumulative_cases, default = 0),
@@ -91,6 +95,7 @@ covid_19_df <- covid_19_df %>%
         month = date %>% month(label = T)
     ) %>% 
     filter(cumulative_cases >= 10) %>% 
+    mutate(days = row_number()) %>% 
     ungroup() %>% 
     select(date, month, state, cumulative_cases:cases_growth) 
 

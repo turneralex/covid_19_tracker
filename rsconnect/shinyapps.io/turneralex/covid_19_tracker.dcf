@@ -5,8 +5,8 @@ account: turneralex
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2106978
-bundleId: 3037262
+bundleId: 3093008
 url: https://turneralex.shinyapps.io/covid_19_tracker/
-when: 1587363942.76603
+when: 1588402595.65952
 asMultiple: FALSE
 asStatic: FALSE
