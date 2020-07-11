@@ -68,11 +68,7 @@ covid_19_df <- covid_19_df %>%
             as.integer(0),
             cumulative_recoveries
         ),
-        cumulative_cases = if_else(
-            lag(cumulative_cases, default = 0) > cumulative_cases,
-            lag(cumulative_cases),
-            cumulative_cases
-        )
+        cumulative_cases = cumulative_cases %>% fix_data_low()
     ) %>% 
     ungroup()
 
@@ -80,13 +76,18 @@ covid_19_df <- covid_19_df %>%
     mutate(
         cumulative_recoveries = replace(
             cumulative_recoveries,
+            covid_19_df$state == "NT",
+            covid_19_df %>% filter(state == "NT") %>% pull(cumulative_recoveries) %>% fix_data_low()
+        ),
+        cumulative_recoveries = replace(
+            cumulative_recoveries,
             covid_19_df$state == "QLD",
-            covid_19_df %>% filter(state == "QLD") %>% pull(cumulative_recoveries) %>% fix_recoveries_low()
+            covid_19_df %>% filter(state == "QLD") %>% pull(cumulative_recoveries) %>% fix_data_low()
         ),
         cumulative_recoveries = replace(
             cumulative_recoveries,
             covid_19_df$state == "SA",
-            covid_19_df %>% filter(state == "SA") %>% pull(cumulative_recoveries) %>% fix_recoveries_high()
+            covid_19_df %>% filter(state == "SA") %>% pull(cumulative_recoveries) %>% fix_data_high()
         ),
         cumulative_active_cases = cumulative_cases - cumulative_deaths - cumulative_recoveries,
         cases_change = cumulative_cases - lag(cumulative_cases, default = 0),
@@ -95,9 +96,10 @@ covid_19_df <- covid_19_df %>%
         month = date %>% month(label = T)
     ) %>% 
     filter(cumulative_cases >= 10) %>% 
+    group_by(state) %>% 
     mutate(days = row_number()) %>% 
     ungroup() %>% 
-    select(date, month, state, cumulative_cases:cases_growth) 
+    select(days, date, month, state, cumulative_cases:cases_growth) 
 
 covid_19_total_df <- covid_19_df %>%
     group_by(date) %>% 
@@ -107,17 +109,16 @@ covid_19_total_df <- covid_19_df %>%
         cumulative_recoveries = cumulative_recoveries %>% sum()
     ) %>% 
     mutate(
+        days = row_number(),
         cumulative_active_cases = cumulative_cases - cumulative_deaths - cumulative_recoveries,
         cases_change = cumulative_cases - lag(cumulative_cases, default = 0),
         cases_growth = (((cumulative_cases / lag(cumulative_cases, default = 0)) - 1) * 100) %>% 
-            round(2)
-    ) %>% 
-    mutate(
+            round(2),
         state = "NATIONAL",
         month = date %>% month(label = T)
     ) %>% 
     filter(cumulative_cases >= 10) %>%
-    select(date, month, state, cumulative_cases:cases_growth) 
+    select(days, date, month, state, cumulative_cases:cases_growth) 
 
 covid_19_combined_df <- covid_19_df %>% 
     bind_rows(covid_19_total_df)
@@ -136,13 +137,13 @@ shinyServer(function(input, output) {
     total_df <- reactive({
         covid_19_combined_df %>% 
             filter(state == input$state) %>% 
-            select(date, cumulative_deaths:cumulative_active_cases) %>%
+            select(days, cumulative_deaths:cumulative_active_cases) %>%
             pivot_longer(
                 cols = cumulative_deaths:cumulative_active_cases,
                 names_to = "variable",
                 values_to = "value"
             ) %>%
-            group_by(date, variable) %>% 
+            group_by(days, variable) %>% 
             summarise(value = value %>% sum()) %>% 
             mutate(
                 variable = variable %>%
@@ -158,9 +159,9 @@ shinyServer(function(input, output) {
         covid_19_combined_df %>%
             filter(state == input$state & cases_growth != Inf) %>% 
             slice(-1) %>% 
-            select(date, cases_change, cases_growth) %>%
+            select(days, cases_change, cases_growth) %>%
             pivot_longer(
-                cols = -date,
+                cols = -days,
                 names_to = "variable",
                 values_to = "value"
             ) %>%
@@ -171,51 +172,49 @@ shinyServer(function(input, output) {
                     "Case Growth"
                 )
             ) %>% 
-            group_by(date, variable) %>% 
+            group_by(days, variable) %>% 
             summarise(value = value %>% sum()) 
     })
 
     output$covid_19_plot <- renderPlot({
         p1 <- state_df() %>% 
-        ggplot(aes(date, cumulative_cases, colour = state)) +
+        ggplot(aes(days, cumulative_cases, colour = state)) +
             geom_line() +
             geom_point() +
             geom_label_repel(data = state_df() %>% 
                                  group_by(state) %>% 
                                  slice(n()),
-                             aes(date + 2,
+                             aes(days + 2,
                                  label = cumulative_cases,
                                  fill = state),
                              colour = "white",
                              show.legend = F) +
-            scale_x_date(date_breaks = "1 week") +
+            scale_x_continuous(breaks = seq(0, 10000, by = 5)) +
             scale_colour_brewer(palette = "Dark2") +
             scale_fill_brewer(palette = "Dark2") +
             labs(title = "Cumulative Total Confirmed Cases by State",
-                 subtitle = "Each state begins after at least 10 cases are recorded",
-                 x = "Date",
+                 x = "Days Since >= 10 Total Cases",
                  y = "Cumulative Total Cases",
                  colour = "State",
                  caption = "Data Source (via The Guardian): https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json") +
             theme(plot.caption = element_text(size = 10))
         
         p2 <- total_df() %>% 
-            ggplot(aes(date, value, fill = variable)) +
+            ggplot(aes(days, value, fill = variable)) +
             geom_col() +
             geom_label(data = total_df() %>% 
                            group_by(variable) %>% 
                            slice(n()),
-                       aes(date + 2,
+                       aes(days + 2,
                            label = value,
                            fill = variable),
                        position = position_stack(),
                        colour = "white",
                        show.legend = F) +
-            scale_x_date(date_breaks = "1 week") +
+            scale_x_continuous(breaks = seq(0, 10000, by = 5)) +
             scale_fill_brewer(palette = "Accent") +
             labs(title = "Cumulative Total Confirmed Cases inc. Deaths & Recoveries*",
-                 subtitle = "Begins after at least 10 cases are recorded",
-                 x = "Date",
+                 x = "Days Since >= 10 Total Cases",
                  y = "Cumulative Totals",
                  fill = "Case Type",
                  caption = "*Data not always updated for recoveries") +
@@ -223,22 +222,22 @@ shinyServer(function(input, output) {
                   plot.caption = element_text(size = 10))
         
         p3 <- change_df() %>% 
-            ggplot(aes(date, value, fill = variable)) +
+            ggplot(aes(days, value, fill = variable)) +
             geom_col() +
             geom_label(data = change_df() %>% 
                            group_by(variable) %>% 
                            slice(n()),
-                       aes(date + 2,
+                       aes(days + 2,
                            label = value,
                            fill = variable),
                        colour = "white",
                        show.legend = F) +
-            scale_x_date(date_breaks = "1 week") +
+            scale_x_continuous(breaks = seq(0, 10000, by = 5)) +
             scale_fill_brewer(palette = "Set1") +
             facet_grid(variable ~ ., scales = "free_y") +
             labs(title = "New Confirmed Cases vs. Previous Day",
                  subtitle = "First day is excluded due to extreme growth from a low base in some states",
-                 x = "Date",
+                 x = "Days Since >= 10 Total Cases",
                  y = "Value") +
             theme(legend.position = "none")
         
